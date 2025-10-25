@@ -1,4 +1,3 @@
-
 import os
 import sqlite3
 import logging
@@ -8,16 +7,20 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# تنظیم لاگ‌گیری برای عیب‌یابی
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# تنظیم لاگ‌گیری
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# توکن ربات شما
+# توکن ربات - بررسی وجود
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+if not BOT_TOKEN:
+    logger.error("❌ BOT_TOKEN not found in environment variables!")
+    print("❌ ERROR: Please set BOT_TOKEN environment variable in Render")
+    sys.exit(1)
 
+print("✅ BOT_TOKEN found, starting bot...")
+
+# ساخت دیتابیس ساده
 def init_database():
     try:
         conn = sqlite3.connect('users.db')
@@ -36,11 +39,12 @@ def init_database():
         ''')
         conn.commit()
         conn.close()
-        logger.info("Database initialized successfully")
+        print("✅ Database initialized successfully")
     except Exception as e:
-        logger.error(f"Database initialization error: {e}")
+        print(f"❌ Database error: {e}")
         raise
 
+# ذخیره کاربر در دیتابیس
 def save_user(user_id, username, first_name, last_name, phone="", service_type=""):
     try:
         conn = sqlite3.connect('users.db')
@@ -53,31 +57,30 @@ def save_user(user_id, username, first_name, last_name, phone="", service_type="
         
         conn.commit()
         conn.close()
-        logger.info(f"User saved: {user_id} - {service_type}")
     except Exception as e:
         logger.error(f"Error saving user: {e}")
 
+# منوی اصلی
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        user = update.message.from_user
-        
-        save_user(
-            user_id=user.id,
-            username=user.username,
-            first_name=user.first_name,
-            last_name=user.last_name or "",
-            service_type="start"
-        )
-        
-        keyboard = [
-            [InlineKeyboardButton("🎯 دریافت مشاوره رایگان", callback_data="consult")],
-            [InlineKeyboardButton("🦸‍♂️ پکیج‌های مسیر قهرمانی", callback_data="packages")],
-            [InlineKeyboardButton("📞 تماس با پشتیبانی", callback_data="support")],
-            [InlineKeyboardButton("ℹ️ درباره ما", callback_data="about")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        welcome_text = """
+    user = update.message.from_user
+    
+    save_user(
+        user_id=user.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name or "",
+        service_type="start"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("🎯 دریافت مشاوره رایگان", callback_data="consult")],
+        [InlineKeyboardButton("🦸‍♂️ پکیج‌های مسیر قهرمانی", callback_data="packages")],
+        [InlineKeyboardButton("📞 تماس با پشتیبانی", callback_data="support")],
+        [InlineKeyboardButton("ℹ️ درباره ما", callback_data="about")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    welcome_text = """
 🌟 به ربات هرم آینده‌ساز خوش آمدید! 🌟
 
 ⚡ **همراه تو در خلق افسانه زندگی‌ات**
@@ -88,33 +91,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • برای آینده‌ای درخشان آماده شوند
 
 👇 لطفاً گزینه مورد نظر را انتخاب کنید:
-        """
-        
-        await update.message.reply_text(welcome_text, reply_markup=reply_markup)
-        logger.info(f"Start command executed for user: {user.id}")
-        
-    except Exception as e:
-        logger.error(f"Error in start command: {e}")
-        await update.message.reply_text("⚠️ خطایی رخ داد. لطفاً دوباره تلاش کنید.")
+    """
+    
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
+# مدیریت کلیک روی دکمه‌ها
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        query = update.callback_query
-        user = query.from_user
-        await query.answer()
+    query = update.callback_query
+    user = query.from_user
+    await query.answer()
+    
+    if query.data == "consult":
+        save_user(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name or "",
+            service_type="consultation"
+        )
         
-        logger.info(f"Button clicked: {query.data} by user: {user.id}")
-        
-        if query.data == "consult":
-            save_user(
-                user_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name or "",
-                service_type="consultation"
-            )
-            
-            consult_text = """
+        consult_text = """
 🎯 **درخواست مشاوره رایگان ثبت شد!**
 
 لطفاً اطلاعات زیر را ارسال کنید:
@@ -124,19 +120,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📱 **شماره تماس:**
 
 ✅ پس از ثبت اطلاعات، کارشناسان ما حداکثر تا ۲۴ ساعت آینده با شما تماس خواهند گرفت.
-            """
-            await query.edit_message_text(consult_text, parse_mode='Markdown')
-            
-        elif query.data == "packages":
-            save_user(
-                user_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name or "",
-                service_type="packages_info"
-            )
-            
-            packages_text = """
+        """
+        await query.edit_message_text(consult_text, parse_mode='Markdown')
+        
+    elif query.data == "packages":
+        save_user(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name or "",
+            service_type="packages_info"
+        )
+        
+        packages_text = """
 🦸‍♂️ **پکیج‌های مسیر قهرمانی Hira**
 
 ✨ **۱. پکیج Hira Spark | HP** 
@@ -172,19 +168,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔸 **HL** = Hira Legacy (خلق میراث)
 
 👇 برای اطلاعات بیشتر و دریافت قیمت، با پشتیبانی تماس بگیرید.
-            """
-            await query.edit_message_text(packages_text)
+        """
+        await query.edit_message_text(packages_text)
+    
+    elif query.data == "support":
+        save_user(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name or "",
+            service_type="support_contact"
+        )
         
-        elif query.data == "support":
-            save_user(
-                user_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name or "",
-                service_type="support_contact"
-            )
-            
-            support_text = """
+        support_text = """
 📞 **تماس با پشتیبانی**
 
 برای ارتباط با پشتیبانی می‌توانید از راه زیر اقدام کنید:
@@ -192,19 +188,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 👨‍💼 **مدیریت:** @Heram_AyandeSaz
 
 💬 **برای مشاوره فوری:** پیام مستقیم به ایدی بالا
-            """
-            await query.edit_message_text(support_text)
+        """
+        await query.edit_message_text(support_text)
+    
+    elif query.data == "about":
+        save_user(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name or "",
+            service_type="about_info"
+        )
         
-        elif query.data == "about":
-            save_user(
-                user_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name or "",
-                service_type="about_info"
-            )
-            
-            about_text = """
+        about_text = """
 ℹ️ **درباره هرم آینده‌ساز**
 
 🦸‍♂️ **ماموریت ما:**
@@ -228,34 +224,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🌟 **شعار ما:**
 "قهرمان زندگی خودت باش، افسانه وجودت را خلق کن!"
-            """
-            await query.edit_message_text(about_text)
-            
-    except Exception as e:
-        logger.error(f"Error in button handler: {e}")
-        try:
-            await query.edit_message_text("⚠️ خطایی رخ داد. لطفاً دوباره تلاش کنید.")
-        except:
-            pass
+        """
+        await query.edit_message_text(about_text)
 
+# مدیریت پیام‌های متنی کاربران
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        user = update.message.from_user
-        user_message = update.message.text
+    user = update.message.from_user
+    user_message = update.message.text
+    
+    if any(keyword in user_message for keyword in ['۰۹', '09', '۰۱', '01', 'نام', 'سن']):
+        save_user(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name or "",
+            phone=user_message,
+            service_type="contact_submitted"
+        )
         
-        logger.info(f"Message received from {user.id}: {user_message}")
-        
-        if any(keyword in user_message for keyword in ['۰۹', '09', '۰۱', '01', 'نام', 'سن']):
-            save_user(
-                user_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name or "",
-                phone=user_message,
-                service_type="contact_submitted"
-            )
-            
-            response = """
+        response = """
 ✅ **اطلاعات شما با موفقیت ثبت شد!**
 
 🦸‍♂️ به خانواده قهرمانان هرم آینده‌ساز خوش آمدید!
@@ -267,12 +254,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🌟 **به یاد داشته باشید:**
 تو قادر به خلق افسانه زندگی خود هستی!
-            """
-            await update.message.reply_text(response)
-        
-        elif user_message.upper() in ['HP', 'HA', 'HL']:
-            package_info = {
-                'HP': """
+        """
+        await update.message.reply_text(response)
+    
+    elif user_message.upper() in ['HP', 'HA', 'HL']:
+        package_info = {
+            'HP': """
 ✨ **پکیج Hira Spark | HP** 
 🎯 **جرقه‌ای برای کشف قهرمان درون**
 
@@ -283,8 +270,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ✅ **مناسب برای:**
 نوجوانانی که می‌خواهند استعدادهای واقعی خود را کشف کنند و مسیر شغلی مناسب را پیدا کنند
-                """,
-                'HA': """
+            """,
+            'HA': """
 🚀 **پکیج Hira Ascent | HA**  
 🎯 **صعود به قلۀ توانمندی‌ها**
 
@@ -297,8 +284,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ✅ **مناسب برای:**
 نوجوانانی که استعدادهای خود را کشف کرده‌اند و می‌خواهند آن را به مهارت تبدیل کنند
-                """,
-                'HL': """
+            """,
+            'HL': """
 🏆 **پکیج Hira Legacy | HL**
 🎯 **خالق میراث ماندگار زندگی‌ات**
 
@@ -313,42 +300,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ✅ **مناسب برای:**
 نوجوانانی که می‌خواهند در حوزه تخصصی خود به استادی برسند و میراثی ماندگار خلق کنند
-                """
-            }
-            selected_package = user_message.upper()
-            await update.message.reply_text(package_info[selected_package])
-            
-            save_user(
-                user_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name or "",
-                service_type=f"package_{selected_package}_info"
-            )
+            """
+        }
+        selected_package = user_message.upper()
+        await update.message.reply_text(package_info[selected_package])
         
-        else:
-            await update.message.reply_text("لطفاً از منوی ربات استفاده کنید.")
-            
-    except Exception as e:
-        logger.error(f"Error in message handler: {e}")
-        await update.message.reply_text("⚠️ خطایی رخ داد. لطفاً دوباره تلاش کنید.")
+        save_user(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name or "",
+            service_type=f"package_{selected_package}_info"
+        )
+    
+    else:
+        await update.message.reply_text("لطفاً از منوی ربات استفاده کنید.")
 
 def main():
     try:
-        logger.info("=== Starting HIRA Bot ===")
-        
-        # بررسی وجود توکن
-        if not BOT_TOKEN:
-            logger.error("BOT_TOKEN not found in environment variables!")
-            print("❌ ERROR: BOT_TOKEN not found!")
-            sys.exit(1)
-        
-        logger.info("BOT_TOKEN found, initializing database...")
+        print("🚀 Starting HIRA Bot...")
         
         # ایجاد دیتابیس در ابتدا
         init_database()
-        
-        logger.info("Database initialized, creating application...")
         
         # ساخت ربات
         application = Application.builder().token(BOT_TOKEN).build()
@@ -358,19 +331,14 @@ def main():
         application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         
-        logger.info("Application configured, starting polling...")
-        print("🤖 Bot is starting...")
+        print("✅ Bot is running and polling...")
         
         # اجرای ربات
-        application.run_polling(
-            drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES
-        )
+        application.run_polling()
         
     except Exception as e:
-        logger.error(f"Fatal error in main: {e}")
-        logger.error(traceback.format_exc())
         print(f"💥 FATAL ERROR: {e}")
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == '__main__':
